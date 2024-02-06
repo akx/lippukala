@@ -38,6 +38,9 @@ let currentlyShownId = null;
 /** The current year, as a string. */
 const thisYearString = String(new Date().getFullYear());
 
+/** @type {PosQR|null} */
+let posQR = null;
+
 /**
  * @param {string} id ID or selector
  * @returns {HTMLElement}
@@ -131,6 +134,7 @@ function isPossiblyOldCode(code) {
  */
 function showCode(code) {
   const statusDiv = $("#status");
+  const acceptBtn = $("#accept-btn");
   if (code) {
     currentlyShownId = code.id;
     statusDiv.innerHTML = Tee(
@@ -139,10 +143,12 @@ function showCode(code) {
     );
     statusDiv.classList.toggle("check-year", isPossiblyOldCode(code));
     document.body.className = getCodeCSSClass(code);
+    acceptBtn.disabled = !!code.used;
   } else {
     currentlyShownId = null;
     statusDiv.innerHTML = "";
     document.body.className = "";
+    acceptBtn.disabled = true;
   }
 }
 
@@ -168,6 +174,12 @@ function confirmUseCode(code) {
   $("#confirm-button").focus();
 }
 
+function clearAndRefocusCodeInput() {
+  const codeInput = $("#code");
+  codeInput.value = "";
+  codeInput.focus();
+}
+
 /**
  * Form submit handler for the confirm form dialog.
  */
@@ -180,11 +192,7 @@ function onConfirmCode() {
   codeToConfirm = null;
   useCode(code);
   setTimeout(syncUseQueue, 4);
-  setTimeout(() => {
-    const codeInput = $("#code");
-    codeInput.value = "";
-    codeInput.focus();
-  }, 250);
+  setTimeout(clearAndRefocusCodeInput, 250);
 }
 
 /**
@@ -226,11 +234,14 @@ function findMatchingCodes(inputCode) {
 function search(enter) {
   const statusDiv = $("#status");
   const inputCode = $("#code").value.toLowerCase().trim();
+  const clearBtn = $("#clear-btn");
   if (!inputCode.length) {
+    clearBtn.disabled = true;
     showCode(null);
     statusDiv.innerHTML = "";
     return;
   }
+  clearBtn.disabled = false;
   const { nMatches, code } = findMatchingCodes(inputCode);
   if (nMatches === 1) {
     showCode(code);
@@ -293,7 +304,32 @@ function debounce(fn, delay) {
   };
 }
 
+async function handleCameraClick() {
+  if (!posQR) {
+    posQR = new PosQR({
+      addLogEntry,
+      onFoundQRCode: (parsedBarcode) => {
+        const text = String(parsedBarcode.text()).trim();
+        if (/^\d+$/.test(text)) {
+          $("#code").value = text;
+          search(true);
+        } else {
+          this.addLogEntry(`QR-koodi ei ole numero: ${text}`);
+        }
+      },
+    });
+  }
+  if (posQR.isStarted()) {
+    await posQR.stop();
+  } else {
+    await posQR.start();
+  }
+  $("#camera-btn").classList.toggle("started", posQR.isStarted());
+}
+
 window.init = async function init() {
+  showCode(null); // reset dom state
+  search(false); // reset dom state
   await download();
   addLogEntry(`${Object.keys(codes).length} koodia`);
   setInterval(download, (50 + Math.random() * 20) * 1000);
@@ -302,4 +338,13 @@ window.init = async function init() {
   $("#codeform").addEventListener("submit", debounce(formSubmit, 250), true);
   $("#confirm-form").addEventListener("submit", onConfirmCode, true);
   $("#confirm-dialog").addEventListener("close", cancelConfirm, true);
+  $("#camera-btn").addEventListener("click", () => handleCameraClick(), true);
+  $("#clear-btn").addEventListener(
+    "click",
+    () => {
+      clearAndRefocusCodeInput();
+      search(false);
+    },
+    true,
+  );
 };
