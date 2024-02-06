@@ -16,6 +16,53 @@ class PosQRNative {
   }
 }
 
+class PosQRRxing {
+  constructor(width) {
+    this.width = width;
+    this.rxing = null;
+  }
+
+  async init() {
+    // Find out where we were loaded from to load the rest from the same place
+    // eslint-disable-next-line no-restricted-globals
+    const qrScriptURL = new URL(document.getElementById("qr-script").src, location.href);
+    const root = qrScriptURL.href.replace(/\/[^/]+$/, "");
+
+    // eslint-disable-next-line no-restricted-globals
+    const wasmURL = new URL(`${root}/rxing_qr_wasm_bg.wasm`, location.href);
+    const rxingMod = await import(`${root}/rxing_qr_wasm.js`);
+    await rxingMod.default(wasmURL); // fetch wasm and initialize in module
+    this.rxing = rxingMod;
+    const canvas = document.createElement("canvas");
+    canvas.id = "posqr-canvas";
+    document.body.appendChild(canvas);
+    this.canvas = canvas;
+    this.context = canvas.getContext("2d", { willReadFrequently: true });
+  }
+
+  async detectFromVideo(video) {
+    const { canvas, width, rxing } = this;
+    if (!rxing) {
+      throw new Error("Rxing not initialized");
+    }
+    const height = width * (video.videoHeight / video.videoWidth);
+    canvas.width = width;
+    canvas.height = height;
+    this.context.drawImage(video, 0, 0, width, height);
+    const imageData = this.context.getImageData(0, 0, width, height);
+    try {
+      const luma8Data = rxing.convert_js_image_to_luma(imageData.data);
+      const parsedText = rxing.decode_qrcode_text(luma8Data, imageData.width, imageData.height);
+      return [{ rawValue: parsedText }];
+    } catch (err) {
+      if (String(err) === "NotFoundException") {
+        return [];
+      }
+      throw err;
+    }
+  }
+}
+
 class PosQR {
   static hasBarcodeDetector() {
     return typeof BarcodeDetector !== "undefined";
@@ -41,8 +88,8 @@ class PosQR {
       this.addLogEntry("Käytetään sisäänrakennettua QR-koodinlukijaa");
       this.detector = new PosQRNative();
     } else {
-      this.addLogEntry("Ei QR-koodinlukijaa");
-      throw new Error("No QR code detector");
+      this.addLogEntry("Ladataan Rxing-QR-koodinlukijaa...");
+      this.detector = new PosQRRxing(480);
     }
     await this.detector.init();
     this.addLogEntry("QR-koodinlukija valmis");
