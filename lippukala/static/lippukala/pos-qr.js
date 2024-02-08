@@ -28,8 +28,8 @@ class PosQRRxing {
     const root = qrScriptURL.href.replace(/\/[^/]+$/, "");
 
     // eslint-disable-next-line no-restricted-globals
-    const wasmURL = new URL(`${root}/rxing_wasm_bg.wasm`, location.href);
-    const rxingMod = await import(`${root}/rxing_wasm.js`);
+    const wasmURL = new URL(`${root}/rxing_qr_wasm_bg.wasm`, location.href);
+    const rxingMod = await import(`${root}/rxing_qr_wasm.js`);
     await rxingMod.default(wasmURL); // fetch wasm and initialize in module
     this.rxing = rxingMod;
     const canvas = document.createElement("canvas");
@@ -37,12 +37,6 @@ class PosQRRxing {
     document.body.appendChild(canvas);
     this.canvas = canvas;
     this.context = canvas.getContext("2d", { willReadFrequently: true });
-
-    const { DecodeHintDictionary, DecodeHintTypes } = this.rxing;
-    this.hints = new DecodeHintDictionary();
-    // Yes, hints are strings, not booleans
-    this.hints.set_hint(DecodeHintTypes.TryHarder, "false");
-    this.hints.set_hint(DecodeHintTypes.PossibleFormats, "qrcode");
   }
 
   async detectFromVideo(video) {
@@ -57,10 +51,10 @@ class PosQRRxing {
     const imageData = this.context.getImageData(0, 0, width, height);
     try {
       const luma8Data = rxing.convert_js_image_to_luma(imageData.data);
-      const parsedBarcode = rxing.decode_barcode_with_hints(luma8Data, imageData.width, imageData.height, this.hints);
-      return [{ rawValue: String(parsedBarcode.text()), rxingResult: parsedBarcode }];
+      const parsedText = rxing.decode_qrcode_text(luma8Data, imageData.width, imageData.height);
+      return [{ rawValue: parsedText }];
     } catch (err) {
-      if (String(err) === "not found") {
+      if (String(err) === "NotFoundException") {
         return [];
       }
       throw err;

@@ -7,71 +7,19 @@ use rxing::{
     DecodeHintType,
     BinaryBitmap,
     self,
-    ResultPoint,
     Reader,
     common::HybridBinarizer,
     qrcode::QRCodeReader
 };
 
-#[derive(Clone)]
 #[wasm_bindgen]
-pub struct BarcodeResult {
-    text: String,
-    raw_bytes: Vec<u8>,
-    num_bits: usize,
-    result_points: Vec<f32>,
-    timestamp: isize,
-}
-
-#[wasm_bindgen]
-impl BarcodeResult {
-    pub fn timestamp(&self) -> isize {
-        self.timestamp
-    }
-
-    /// Each pair of f32 values is an (x,y) point
-    pub fn result_points(&self) -> Vec<f32> {
-        self.result_points.to_vec()
-    }
-
-    pub fn num_bits(&self) -> usize {
-        self.num_bits
-    }
-
-    pub fn raw_bytes(&self) -> Vec<u8> {
-        self.raw_bytes.to_vec()
-    }
-
-    pub fn text(&self) -> String {
-        self.text.to_owned()
-    }
-
-}
-
-impl From<rxing::RXingResult> for BarcodeResult {
-    fn from(value: rxing::RXingResult) -> Self {
-        Self {
-            text: value.getText().to_owned(),
-            raw_bytes: value.getRawBytes().to_vec(),
-            num_bits: value.getNumBits(),
-            result_points: value
-                .getRXingResultPoints()
-                .iter()
-                .flat_map(|rxp| [rxp.getX(), rxp.getY()])
-                .collect(),
-            timestamp: value.getTimestamp() as isize,
-        }
-    }
-}
-
-#[wasm_bindgen]
-/// Decode a QR code from an array of 8bit luma data
-pub fn decode_qrcode(
+/// Decode a QR code's text content from an array of 8bit luma data
+pub fn decode_qrcode_text(
     luma: Vec<u8>,
     width: u32,
     height: u32,
     try_harder: Option<bool>,
-) -> Result<BarcodeResult, String> {
+) -> Result<String, String> {
     let mut hints: rxing::DecodingHintDictionary = HashMap::new();
     let mut reader = QRCodeReader::default();
 
@@ -79,13 +27,12 @@ pub fn decode_qrcode(
         .entry(DecodeHintType::TRY_HARDER)
         .or_insert(DecodeHintValue::TryHarder(try_harder.unwrap_or(false)));
 
-    let mut bmp = BinaryBitmap::new(HybridBinarizer::new(Luma8LuminanceSource::new(
-        luma, width, height,
-    )));
+    let ls = Luma8LuminanceSource::new(luma, width, height);
+    let mut bmp = BinaryBitmap::new(HybridBinarizer::new(ls));
 
     let rx_res = reader.decode_with_hints(&mut bmp, &hints);
     match rx_res {
-        Ok(result) => Ok(result.into()),
+        Ok(result) => Ok(result.getText().to_owned()),
         Err(e) => Err(e.to_string()),
     }
 }
