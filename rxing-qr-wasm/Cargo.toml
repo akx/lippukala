@@ -1,0 +1,20 @@
+[package]
+name = "rxing-qr-wasm"
+version = "0.0.0"
+edition = "2021"
+description = "QR code reader based on rxing-wasm"
+license = "Apache 2.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2.84"
+js-sys = "0.3.61"
+
+rxing = {version = "~0.5.7", default-features = false, features = ["wasm_support"]}
+
+[profile.release]
+# Tell `rustc` to optimize for small code size.
+opt-level = "s"
+lto = "fat"
